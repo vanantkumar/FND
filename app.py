@@ -1,4 +1,5 @@
 import streamlit as st
+from openai import OpenAI
 import requests
 from bs4 import BeautifulSoup
 import sqlite3
@@ -80,9 +81,9 @@ if not st.session_state["user"]:
 
 # -------------------- LOAD API KEY --------------------
 try:
-    API_KEY = st.secrets["PPLX_API_KEY"]
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except:
-    st.error("❌ API key missing in Streamlit secrets")
+    st.error("❌ OpenAI API key missing in Streamlit secrets")
     st.stop()
 
 # -------------------- MAIN UI --------------------
@@ -115,13 +116,6 @@ else:
 
 # -------------------- ANALYSIS FUNCTION --------------------
 def analyze_news(text):
-    url = "https://api.perplexity.ai/chat/completions"
-
-    headers = {
-        "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json"
-    }
-
     prompt = f"""
     Analyze the following news and respond STRICTLY in this format:
 
@@ -133,23 +127,18 @@ def analyze_news(text):
     {text}
     """
 
-    data = {
-        "model": "mistral-7b-instruct",
-        "messages": [
-            {"role": "user", "content": prompt}
-        ]
-    }
-
     try:
-        response = requests.post(url, headers=headers, json=data, timeout=30)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
 
-        if response.status_code == 200:
-            return response.json()["choices"][0]["message"]["content"]
-        else:
-            return f"API Error ❌\n{response.text}"
+        return response.choices[0].message.content
 
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"API Error ❌\n{str(e)}"
 
 # -------------------- ANALYZE --------------------
 if st.button("🔍 Analyze News"):
