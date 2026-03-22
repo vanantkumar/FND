@@ -79,12 +79,12 @@ if not st.session_state["user"]:
     login_ui()
     st.stop()
 
-# -------------------- LOAD GEMINI API --------------------
+# -------------------- LOAD GEMINI --------------------
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel("gemini-1.5-flash")
-except:
-    st.error("❌ Gemini API key missing in Streamlit secrets")
+    model = genai.GenerativeModel("gemini-pro")   # ✅ FIXED MODEL
+except Exception as e:
+    st.error(f"❌ Gemini setup error: {e}")
     st.stop()
 
 # -------------------- MAIN UI --------------------
@@ -131,7 +131,6 @@ def analyze_news(text):
     try:
         response = model.generate_content(prompt)
         return response.text
-
     except Exception as e:
         return f"API Error ❌\n{str(e)}"
 
