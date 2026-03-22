@@ -6,6 +6,9 @@ from passlib.hash import pbkdf2_sha256
 import google.generativeai as genai
 from reportlab.platypus import SimpleDocTemplate, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
+from datetime import datetime
+import urllib.parse
+from xml.etree import ElementTree as ET
 
 # -------------------- CONFIG --------------------
 st.set_page_config(page_title="AI Fake News Detector", layout="centered")
@@ -74,16 +77,16 @@ def login_ui():
             else:
                 st.error("Invalid credentials ❌")
 
-# -------------------- CHECK LOGIN --------------------
+# -------------------- LOGIN CHECK --------------------
 if not st.session_state["user"]:
     login_ui()
     st.stop()
 
-# -------------------- GEMINI SETUP (AUTO MODEL DETECT) --------------------
+# -------------------- GEMINI SETUP --------------------
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-    # 🔥 Auto-detect working model
+    # Auto-detect model
     models = genai.list_models()
     working_model = None
 
@@ -92,17 +95,63 @@ try:
             working_model = m.name
             break
 
-    if not working_model:
-        st.error("❌ No compatible Gemini model found")
-        st.stop()
-
     model = genai.GenerativeModel(working_model)
 
-    st.success(f"✅ Using model: {working_model}")
-
 except Exception as e:
-    st.error(f"❌ Gemini setup error: {e}")
+    st.error(f"❌ Gemini error: {e}")
     st.stop()
+
+# -------------------- FETCH REAL NEWS --------------------
+def fetch_real_news(query):
+    try:
+        query_encoded = urllib.parse.quote(query[:100])
+        url = f"https://news.google.com/rss/search?q={query_encoded}&hl=en-IN&gl=IN&ceid=IN:en"
+
+        res = requests.get(url, timeout=10)
+        root = ET.fromstring(res.content)
+
+        headlines = []
+        for item in root.findall(".//item")[:5]:
+            headlines.append(item.find("title").text)
+
+        return headlines
+    except:
+        return []
+
+# -------------------- ANALYZE --------------------
+def analyze_news(text):
+    current_date = datetime.now().strftime("%B %Y")
+
+    real_news = fetch_real_news(text)
+    headlines_text = "\n".join(real_news) if real_news else "No relevant news found"
+
+    prompt = f"""
+    Today's date: {current_date}
+
+    User News:
+    {text}
+
+    Real News Headlines:
+    {headlines_text}
+
+    Task:
+    Compare and respond STRICTLY:
+
+    Verdict: Real / Fake / Unverified
+    Confidence: XX%
+    Explanation:
+
+    Rules:
+    - Match → Real
+    - Contradiction → Fake
+    - No evidence → Unverified
+    """
+
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"API Error ❌\n{str(e)}"
 
 # -------------------- MAIN UI --------------------
 st.title("🧠 Fake News Detection System")
@@ -111,7 +160,7 @@ st.write(f"👤 Logged in as: {st.session_state['user']}")
 option = st.radio("Choose Input Type:", ["Text", "URL"])
 news_text = ""
 
-# -------------------- URL INPUT --------------------
+# URL input
 if option == "URL":
     url_input = st.text_input("Enter News URL")
 
@@ -126,47 +175,30 @@ if option == "URL":
             st.text_area("Extracted Content", news_text, height=200)
 
         except Exception as e:
-            st.error(f"Failed to fetch URL ❌\n{e}")
+            st.error(f"Failed ❌ {e}")
 
-# -------------------- TEXT INPUT --------------------
+# Text input
 else:
     news_text = st.text_area("Enter News Content", height=200)
 
-# -------------------- ANALYSIS FUNCTION --------------------
-def analyze_news(text):
-    prompt = f"""
-    Analyze the following news and respond STRICTLY in this format:
-
-    Verdict: Fake or Real
-    Confidence: XX%
-    Explanation: ...
-
-    News:
-    {text}
-    """
-
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"API Error ❌\n{str(e)}"
-
-# -------------------- ANALYZE --------------------
+# Analyze button
 if st.button("🔍 Analyze News"):
     if news_text.strip() == "":
-        st.warning("⚠️ Enter news first")
+        st.warning("Enter news first ⚠️")
     else:
         with st.spinner("Analyzing..."):
             result = analyze_news(news_text)
 
         result_lower = result.lower()
 
-        if any(word in result_lower for word in ["fake", "false", "misleading"]):
+        if "fake" in result_lower:
             st.error("🚨 FAKE NEWS DETECTED")
-        elif any(word in result_lower for word in ["real", "true", "accurate"]):
+        elif "real" in result_lower:
             st.success("✅ REAL NEWS")
+        elif "unverified" in result_lower:
+            st.info("🤔 UNVERIFIED NEWS")
         else:
-            st.warning("⚠️ Could not clearly classify")
+            st.warning("⚠️ Could not classify")
 
         st.markdown(result)
 
@@ -175,7 +207,7 @@ if st.button("🔍 Analyze News"):
                   (st.session_state["user"], news_text, result))
         conn.commit()
 
-        # PDF Export
+        # PDF export
         doc = SimpleDocTemplate("report.pdf")
         styles = getSampleStyleSheet()
         story = [Paragraph(result, styles["Normal"])]
