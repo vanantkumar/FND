@@ -79,10 +79,27 @@ if not st.session_state["user"]:
     login_ui()
     st.stop()
 
-# -------------------- GEMINI SETUP --------------------
+# -------------------- GEMINI SETUP (AUTO MODEL DETECT) --------------------
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel("gemini-1.5-flash-latest")  # ✅ WORKING MODEL
+
+    # 🔥 Auto-detect working model
+    models = genai.list_models()
+    working_model = None
+
+    for m in models:
+        if "generateContent" in m.supported_generation_methods:
+            working_model = m.name
+            break
+
+    if not working_model:
+        st.error("❌ No compatible Gemini model found")
+        st.stop()
+
+    model = genai.GenerativeModel(working_model)
+
+    st.success(f"✅ Using model: {working_model}")
+
 except Exception as e:
     st.error(f"❌ Gemini setup error: {e}")
     st.stop()
