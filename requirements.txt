@@ -1,6 +1,6 @@
 streamlit
-openai
 requests
 beautifulsoup4
 reportlab
 passlib
+google-generativeai
