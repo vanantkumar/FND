@@ -30,7 +30,7 @@ def init_db():
     )
     """)
 
-    # Default admin user
+    # Default admin
     user = c.execute("SELECT * FROM users WHERE username='admin'").fetchone()
     if not user:
         hashed = pbkdf2_sha256.hash("admin123")
@@ -46,11 +46,9 @@ if "user" not in st.session_state:
 # -------------------- AUTH --------------------
 def login_ui():
     st.title("🔐 Login / Signup")
-
     st.info("Default Login → admin / admin123")
 
     option = st.radio("Choose:", ["Login", "Signup"])
-
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
@@ -62,7 +60,7 @@ def login_ui():
                 conn.commit()
                 st.success("Account created ✅")
             else:
-                st.warning("Enter details")
+                st.warning("Enter all fields")
 
     else:
         if st.button("Login"):
@@ -84,25 +82,23 @@ if not st.session_state["user"]:
 try:
     API_KEY = st.secrets["PPLX_API_KEY"]
 except:
-    st.error("API key missing in Streamlit secrets ❌")
+    st.error("❌ API key missing in Streamlit secrets")
     st.stop()
 
-# -------------------- MAIN APP --------------------
+# -------------------- MAIN UI --------------------
 st.title("🧠 Fake News Detection System")
-
 st.write(f"👤 Logged in as: {st.session_state['user']}")
 
 option = st.radio("Choose Input Type:", ["Text", "URL"])
-
 news_text = ""
 
 # -------------------- URL INPUT --------------------
 if option == "URL":
-    url = st.text_input("Enter News URL")
+    url_input = st.text_input("Enter News URL")
 
     if st.button("Fetch News"):
         try:
-            res = requests.get(url)
+            res = requests.get(url_input, timeout=10)
             soup = BeautifulSoup(res.text, "html.parser")
             paragraphs = soup.find_all("p")
             news_text = " ".join([p.text for p in paragraphs])
@@ -110,8 +106,8 @@ if option == "URL":
             st.success("News Extracted ✅")
             st.text_area("Extracted Content", news_text, height=200)
 
-        except:
-            st.error("Failed to fetch URL ❌")
+        except Exception as e:
+            st.error(f"Failed to fetch URL ❌\n{e}")
 
 # -------------------- TEXT INPUT --------------------
 else:
@@ -127,46 +123,50 @@ def analyze_news(text):
     }
 
     prompt = f"""
-    Analyze the following news and determine if it is FAKE or REAL.
+    Analyze the following news and respond STRICTLY in this format:
 
-    Provide:
-    - Verdict (Fake/Real)
-    - Confidence (%)
-    - Explanation
+    Verdict: Fake or Real
+    Confidence: XX%
+    Explanation: ...
 
     News:
     {text}
     """
 
     data = {
-        "model": "sonar-medium-online",
+        "model": "mistral-7b-instruct",
         "messages": [
             {"role": "user", "content": prompt}
         ]
     }
 
-    response = requests.post(url, headers=headers, json=data)
+    try:
+        response = requests.post(url, headers=headers, json=data, timeout=30)
 
-    if response.status_code == 200:
-        return response.json()["choices"][0]["message"]["content"]
-    else:
-        return "API Error ❌"
+        if response.status_code == 200:
+            return response.json()["choices"][0]["message"]["content"]
+        else:
+            return f"API Error ❌\n{response.text}"
+
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 # -------------------- ANALYZE --------------------
 if st.button("🔍 Analyze News"):
     if news_text.strip() == "":
-        st.warning("Enter news first ⚠️")
+        st.warning("⚠️ Enter news first")
     else:
         with st.spinner("Analyzing..."):
             result = analyze_news(news_text)
 
-        # Color result
-        if "fake" in result.lower():
+        result_lower = result.lower()
+
+        if any(word in result_lower for word in ["fake", "false", "misleading"]):
             st.error("🚨 FAKE NEWS DETECTED")
-        elif "real" in result.lower():
+        elif any(word in result_lower for word in ["real", "true", "accurate"]):
             st.success("✅ REAL NEWS")
         else:
-            st.info("Result unclear")
+            st.warning("⚠️ Could not clearly classify")
 
         st.markdown(result)
 
