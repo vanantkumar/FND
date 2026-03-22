@@ -79,10 +79,10 @@ if not st.session_state["user"]:
     login_ui()
     st.stop()
 
-# -------------------- LOAD GEMINI --------------------
+# -------------------- GEMINI SETUP --------------------
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel("gemini-pro")   # ✅ FIXED MODEL
+    model = genai.GenerativeModel("gemini-1.5-flash-latest")  # ✅ WORKING MODEL
 except Exception as e:
     st.error(f"❌ Gemini setup error: {e}")
     st.stop()
