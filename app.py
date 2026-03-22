@@ -1,9 +1,9 @@
 import streamlit as st
-from openai import OpenAI
 import requests
 from bs4 import BeautifulSoup
 import sqlite3
 from passlib.hash import pbkdf2_sha256
+import google.generativeai as genai
 from reportlab.platypus import SimpleDocTemplate, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
 
@@ -79,11 +79,12 @@ if not st.session_state["user"]:
     login_ui()
     st.stop()
 
-# -------------------- LOAD API KEY --------------------
+# -------------------- LOAD GEMINI API --------------------
 try:
-    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model = genai.GenerativeModel("gemini-1.5-flash")
 except:
-    st.error("❌ OpenAI API key missing in Streamlit secrets")
+    st.error("❌ Gemini API key missing in Streamlit secrets")
     st.stop()
 
 # -------------------- MAIN UI --------------------
@@ -128,14 +129,8 @@ def analyze_news(text):
     """
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
-
-        return response.choices[0].message.content
+        response = model.generate_content(prompt)
+        return response.text
 
     except Exception as e:
         return f"API Error ❌\n{str(e)}"
